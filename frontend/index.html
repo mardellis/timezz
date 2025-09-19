@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeZ - Professional Time Tracking</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark: #1e293b;
+            --light: #f1f5f9;
+            --text: #334155;
+            --border: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: var(--text);
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: var(--shadow-xl);
+            width: 100%;
+            max-width: 1200px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .header .subtitle {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .timer-section {
+            background: linear-gradient(135deg, #f6f8fb 0%, #ffffff 100%);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid var(--border);
+        }
+
+        .timer-display {
+            background: var(--dark);
+            color: white;
+            font-size: 3rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.1em;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .timer-display::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .timer-display.active::before {
+            animation: loading 2s linear infinite;
+        }
+
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .current-task {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .current-task-label {
+            font-size: 0.875rem;
+            color: var(--text);
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+
+        .current-task-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .timer-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            color: white;
+            grid-column: span 2;
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .btn-pause {
+            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .stats-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f6f8fb 0%, #ffffff 100%);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text);
+            opacity: 0.7;
+        }
+
+        .recent-entries {
+            margin-top: 30px;
+        }
+
+        .entry-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .entry-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .entry-list::-webkit-scrollbar-track {
+            background: var(--light);
+            border-radius: 3px;
+        }
+
+        .entry-list::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 3px;
+        }
+
+        .entry-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .entry-item:hover {
+            background: var(--light);
+            transform: translateX(5px);
+        }
+
+        .entry-info {
+            flex: 1;
+        }
+
+        .entry-task {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 5px;
+        }
+
+        .entry-time {
+            font-size: 0.875rem;
+            color: var(--text);
+            opacity: 0.7;
+        }
+
+        .entry-duration {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--dark);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: var(--shadow-xl);
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .login-modal.hidden {
+            display: none;
+        }
+
+        .login-form {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-login {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i class="fas fa-clock"></i>
+                TimeZ
+            </h1>
+            <div class="subtitle">Professional Time Tracking for Trello</div>
+        </div>
+
+        <div class="main-content">
+            <div class="timer-section">
+                <div class="timer-display" id="timerDisplay">
+                    00:00:00
+                </div>
+
+                <div class="current-task" id="currentTask" style="display: none;">
+                    <div class="current-task-label">Currently tracking</div>
+                    <div class="current-task-name" id="currentTaskName">-</div>
+                </div>
+
+                <div class="timer-controls">
+                    <button class="btn btn-start" id="startBtn" onclick="startTimer()">
+                        <i class="fas fa-play"></i>
+                        Start Timer
+                    </button>
+                    <button class="btn btn-pause" id="pauseBtn" style="display: none;" onclick="pauseTimer()">
+                        <i class="fas fa-pause"></i>
+                        Pause
+                    </button>
+                    <button class="btn btn-stop" id="stopBtn" style="display: none;" onclick="stopTimer()">
+                        <i class="fas fa-stop"></i>
+                        Stop
+                    </button>
+                </div>
+            </div>
+
+            <div class="stats-section">
+                <h2 class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    Statistics
+                </h2>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="todayHours">0.0</div>
+                        <div class="stat-label">Hours Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="weekHours">0.0</div>
+                        <div class="stat-label">Hours This Week</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="todayTasks">0</div>
+                        <div class="stat-label">Tasks Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avgDuration">0</div>
+                        <div class="stat-label">Avg Duration (min)</div>
+                    </div>
+                </div>
+
+                <div class="recent-entries">
+                    <h3 class="section-title">
+                        <i class="fas fa-history"></i>
+                        Recent Entries
+                    </h3>
+                    <div class="entry-list" id="entryList">
+                        <!-- Entries will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="login-modal" id="loginModal">
+        <div class="login-form">
+            <h2 style="margin-bottom: 30px; text-align: center; color: var(--dark);">
+                <i class="fas fa-sign-in-alt"></i> Login to TimeZ
+            </h2>
+            <form onsubmit="login(event)">
+                <div class="form-group">
+                    <label class="form-label">Trello User ID</label>
+                    <input type="text" class="form-input" id="trelloUserId" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Name</label>
+                    <input type="text" class="form-input" id="userName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="userEmail" required>
+                </div>
+                <button type="submit" class="btn btn-login">
+                    Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000/api/v1';
+        let authToken = localStorage.getItem('authToken');
+        let currentTimer = null;
+        let timerInterval = null;
+        let elapsedSeconds = 0;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!authToken) {
+                document.getElementById('loginModal').classList.remove('hidden');
+            } else {
+                initialize();
+            }
+        });
+
+        // Login function
+        async function login(event) {
+            event.preventDefault();
+            
+            const data = {
+                trello_user_id: document.getElementById('trelloUserId').value,
+                trello_token: 'dummy_token',
+                name: document.getElementById('userName').value,
+                email: document.getElementById('userEmail').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    authToken = result.access_token;
+                    localStorage.setItem('authToken', authToken);
+                    document.getElementById('loginModal').classList.add('hidden');
+                    showToast('Login successful!', 'success');
+                    initialize();
+                } else {
+                    showToast('Login failed. Please try again.', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error. Please check your server.', 'error');
+            }
+        }
+
+        // Initialize application
+        async function initialize() {
+            await checkActiveTimer();
+            await loadStats();
+            await loadRecentEntries();
+        }
+
+        // API helper
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            };
+            
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            
+            if (!response.ok) {
+                throw new Error(`API call failed: ${response.status}`);
+            }
+            
+            return response.json();
+        }
+
+        // Timer functions
+        async function startTimer() {
+            try {
+                // For demo, using hardcoded values
+                const result = await apiCall('/time/start', 'POST', {
+                    card_id: 'demo_card_' + Date.now(),
+                    card_name: 'Task #' + Math.floor(Math.random() * 1000),
+                    board_id: 'demo_board'
+                });
+
+                currentTimer = {
+                    id: result.id,
+                    startTime: new Date(result.started_at),
+                    taskName: 'Task #' + Math.floor(Math.random() * 1000)
+                };
+
+                startTimerDisplay();
+                showToast('Timer started!', 'success');
+            } catch (error) {
+                showToast('Failed to start timer', 'error');
+                console.error(error);
+            }
+        }
+
+        async function stopTimer() {
+            try {
+                await apiCall('/time/stop', 'POST');
+                stopTimerDisplay();
+                showToast('Timer stopped!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+            } catch (error) {
+                showToast('Failed to stop timer', 'error');
+            }
+        }
+
+        function pauseTimer() {
+            // Implement pause functionality if needed
+            showToast('Pause feature coming soon!', 'info');
+        }
+
+        async function checkActiveTimer() {
+            try {
+                const result = await apiCall('/time/active');
+                if (result.active) {
+                    currentTimer = {
+                        id: result.id,
+                        startTime: new Date(result.start_time),
+                        taskName: result.card_name
+                    };
+                    elapsedSeconds = Math.floor(result.elapsed_minutes * 60);
+                    startTimerDisplay();
+                }
+            } catch (error) {
+                console.error('Failed to check active timer:', error);
+            }
+        }
+
+        function startTimerDisplay() {
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('pauseBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('currentTask').style.display = 'block';
+            document.getElementById('currentTaskName').textContent = currentTimer.taskName;
+            document.getElementById('timerDisplay').classList.add('active');
+
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+            updateTimerDisplay();
+        }
+
+        function stopTimerDisplay() {
+            clearInterval(timerInterval);
+            currentTimer = null;
+            elapsedSeconds = 0;
+            
+            document.getElementById('startBtn').style.display = 'block';
+            document.getElementById('pauseBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('currentTask').style.display = 'none';
+            document.getElementById('timerDisplay').classList.remove('active');
+            document.getElementById('timerDisplay').textContent = '00:00:00';
+        }
+
+        function updateTimerDisplay() {
+            if (!currentTimer) return;
+            
+            const now = new Date();
+            const elapsed = Math.floor((now - currentTimer.startTime) / 1000) + elapsedSeconds;
+            
+            const hours = Math.floor(elapsed / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            const seconds = elapsed % 60;
+            
+            document.getElementById('timerDisplay').textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        async function loadStats() {
+            try {
+                const todayReport = await apiCall('/reports/detailed?days=1');
+                const weekReport = await apiCall('/reports/detailed?days=7');
+                
+                document.getElementById('todayHours').textContent = todayReport.total_hours.toFixed(1);
+                document.getElementById('weekHours').textContent = weekReport.total_hours.toFixed(1);
+                document.getElementById('todayTasks').textContent = todayReport.total_entries;
+                
+                if (todayReport.total_entries > 0) {
+                    const avgMinutes = (todayReport.total_hours * 60) / todayReport.total_entries;
+                    document.getElementById('avgDuration').textContent = Math.round(avgMinutes);
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function loadRecentEntries() {
+            try {
+                const entries = await apiCall('/time/entries?limit=10');
+                const entryList = document.getElementById('entryList');
+                
+                if (entries.length === 0) {
+                    entryList.innerHTML = '<div style="text-align: center; color: var(--text); opacity: 0.5;">No entries yet</div>';
+                    return;
+                }
+                
+                entryList.innerHTML = entries.map(entry => {
+                    const date = new Date(entry.start_time);
+                    const duration = entry.duration_minutes || 0;
+                    
+                    return `
+                        <div class="entry-item">
+                            <div class="entry-info">
+                                <div class="entry-task">${entry.card_name}</div>
+                                <div class="entry-time">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>
+                            </div>
+                            <div class="entry-duration">${duration.toFixed(1)}m</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load entries:', error);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
