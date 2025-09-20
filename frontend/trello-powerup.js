@@ -146,6 +146,16 @@ TrelloPowerUp.initialize({
                             height: 350
                         });
                     }
+                }, {
+                    icon: 'https://cdn.jsdelivr.net/gh/feathericons/feather/icons/bar-chart-2.svg',
+                    text: 'TimeZZ Dashboard',
+                    callback: function(t) {
+                        return t.popup({
+                            title: 'TimeZZ Dashboard',
+                            url: `${CONFIG.POWER_UP_URL}/dashboard-popup.html`,
+                            height: 600
+                        });
+                    }
                 }];
             }
 
@@ -170,6 +180,16 @@ TrelloPowerUp.initialize({
                             duration: 2
                         });
                     }
+                }
+            }, {
+                icon: 'https://cdn.jsdelivr.net/gh/feathericons/feather/icons/bar-chart-2.svg',
+                text: 'TimeZZ Dashboard',
+                callback: function(t) {
+                    return t.popup({
+                        title: 'TimeZZ Dashboard',
+                        url: `${CONFIG.POWER_UP_URL}/dashboard-popup.html`,
+                        height: 600
+                    });
                 }
             }, {
                 icon: 'https://cdn.jsdelivr.net/gh/feathericons/feather/icons/clock.svg',
