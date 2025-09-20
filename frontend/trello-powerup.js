@@ -5,11 +5,11 @@
  * Complete production-ready version with authentication
  */
 
-// Configuration for GitHub Codespaces
+// Configuration for Render deployment
 const CONFIG = {
-    API_BASE_URL: 'https://localhost:8000',
-    DASHBOARD_URL: 'https://localhost:3000', 
-    POWER_UP_URL: 'https://localhost:3000'
+    API_BASE_URL: 'https://timezz-backend.onrender.com',  // Your backend URL
+    DASHBOARD_URL: 'https://timezz-frontend.onrender.com', 
+    POWER_UP_URL: 'https://timezz-frontend.onrender.com'
 };
 
 // Utility functions
