@@ -17,7 +17,8 @@ app.add_middleware(
         "https://trello.com",
         "https://*.trellocdn.com",
         "https://powerup.timezz.com",
-        "https://app.timezz.com"
+        "https://app.timezz.com" 
+
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -52,4 +53,4 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=4747)
