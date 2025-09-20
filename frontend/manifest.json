@@ -9,7 +9,7 @@
   ],
   "connectors": {
     "iframe": {
-      "url": "https://localhost:3000/trello-powerup.js"
+      "url": "https://timezz-frontend.onrender.com/trello-powerup.js"
     }
   },
   "icon": {
