@@ -9,7 +9,7 @@
   ],
   "connectors": {
     "iframe": {
-      "url": "https://your-domain.com/trello-powerup.js"
+      "url": "https://urban-dollop-xq9gx64j5q5f9756-8080.app.github.dev/trello-powerup.js"
     }
   },
   "icon": {

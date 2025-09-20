@@ -13,9 +13,14 @@ app = FastAPI(title="Trello Time Tracker", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://trello.com",
+        "https://*.trellocdn.com",
+        "https://powerup.timezz.com",
+        "https://app.timezz.com"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 

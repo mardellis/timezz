@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>TimeZZ Dashboard</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 20px; 
+            background: #f8f9fa;
+        }
+        .dashboard-popup {
+            max-width: 400px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0079bf;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        .btn {
+            background: #0079bf;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 8px 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .btn:hover {
+            background: #005a8b;
+        }
+        .btn.secondary {
+            background: #6c757d;
+        }
+        .recent-entries {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .entry-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        .entry-item:last-child {
+            border-bottom: none;
+        }
+        .entry-time {
+            color: #0079bf;
+            font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-popup">
+        <h3 style="margin-top: 0; color: #0079bf;">📊 Board Time Summary</h3>
+        
+        <div id="loadingState" class="loading">
+            Loading your time data...
+        </div>
+
+        <div id="errorState" class="error" style="display: none;">
+            Failed to load time data. Please check your connection to TimeZZ.
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="todayHours">0h</div>
+                    <div class="stat-label">Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="weekHours">0h</div>
+                    <div class="stat-label">This Week</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalEntries">0</div>
+                    <div class="stat-label">Total Entries</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="avgDaily">0h</div>
+                    <div class="stat-label">Daily Average</div>
+                </div>
+            </div>
+
+            <div class="recent-entries">
+                <h4 style="margin-top: 0; color: #2d3436;">Recent Entries</h4>
+                <div id="recentEntriesList">
+                    <!-- Entries will be populated here -->
+                </div>
+            </div>
+
+            <button class="btn" onclick="openFullDashboard()">
+                📈 Open Full Dashboard
+            </button>
+            
+            <button class="btn secondary" onclick="exportTimeReport()">
+                📄 Export Report
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const t = TrelloPowerUp.iframe();
+        let boardData = {};
+
+        // Initialize when ready
+        t.ready().then(() => {
+            loadDashboardData();
+        });
+
+        async function loadDashboardData() {
+            try {
+                const board = await t.board('id', 'name');
+                boardData = board;
+                
+                // Try to load data from TimeZZ backend
+                await fetchTimeData();
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError();
+            }
+        }
+
+        async function fetchTimeData() {
+            try {
+                const authToken = await getAuthToken();
+                
+                if (!authToken) {
+                    showMockData(); // Show demo data if not authenticated
+                    return;
+                }
+
+                // Fetch from TimeZZ API
+                const response = await fetch(`${getApiUrl()}/api/v1/reports/board/${boardData.id}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayData(data);
+                } else {
+                    showMockData();
+                }
+
+            } catch (error) {
+                console.error('API Error:', error);
+                showMockData();
+            }
+        }
+
+        function showMockData() {
+            // Show sample data for demonstration
+            const mockData = {
+                today_hours: 4.5,
+                week_hours: 18.2,
+                total_entries: 23,
+                daily_average: 3.2,
+                recent_entries: [
+                    { card_name: "Design homepage", duration_minutes: 120, created_at: "2024-01-15T10:30:00Z" },
+                    { card_name: "Fix login bug", duration_minutes: 45, created_at: "2024-01-15T09:15:00Z" },
+                    { card_name: "Write documentation", duration_minutes: 90, created_at: "2024-01-14T16:20:00Z" }
+                ]
+            };
+            
+            displayData(mockData);
+        }
+
+        function displayData(data) {
+            // Hide loading, show content
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
+
+            // Update stats
+            document.getElementById('todayHours').textContent = formatHours(data.today_hours || 0);
+            document.getElementById('weekHours').textContent = formatHours(data.week_hours || 0);
+            document.getElementById('totalEntries').textContent = data.total_entries || 0;
+            document.getElementById('avgDaily').textContent = formatHours(data.daily_average || 0);
+
+            // Update recent entries
+            const entriesList = document.getElementById('recentEntriesList');
+            entriesList.innerHTML = '';
+
+            if (data.recent_entries && data.recent_entries.length > 0) {
+                data.recent_entries.slice(0, 5).forEach(entry => {
+                    const entryDiv = document.createElement('div');
+                    entryDiv.className = 'entry-item';
+                    entryDiv.innerHTML = `
+                        <span>${truncateText(entry.card_name, 25)}</span>
+                        <span class="entry-time">${formatMinutes(entry.duration_minutes)}</span>
+                    `;
+                    entriesList.appendChild(entryDiv);
+                });
+            } else {
+                entriesList.innerHTML = '<div style="text-align: center; color: #666;">No recent entries</div>';
+            }
+        }
+
+        function showError() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+        }
+
+        async function getAuthToken() {
+            // Try to get saved token from Trello storage
+            const token = await t.get('member', 'private', 'timezz_token');
+            return token || null;
+        }
+
+        function getApiUrl() {
+            // In production, this should be your actual domain
+            return window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://your-api-domain.com';
+        }
+
+        function formatHours(hours) {
+            return `${Math.round(hours * 10) / 10}h`;
+        }
+
+        function formatMinutes(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            if (hours > 0) {
+                return `${hours}h ${mins}m`;
+            }
+            return `${mins}m`;
+        }
+
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength - 3) + '...';
+        }
+
+        function openFullDashboard() {
+            // Open full TimeZZ dashboard
+            const dashboardUrl = window.location.hostname === 'localhost' 
+                ? 'http://localhost:3000' 
+                : 'https://your-app-domain.com';
+            
+            window.open(dashboardUrl, '_blank');
+        }
+
+        async function exportTimeReport() {
+            try {
+                const authToken = await getAuthToken();
+                if (!authToken) {
+                    alert('Please log in to TimeZZ to export reports.');
+                    return;
+                }
+
+                // In a real implementation, this would trigger a report download
+                alert('Report export feature would generate a CSV/PDF report here.');
+                
+            } catch (error) {
+                alert('Failed to export report. Please try again.');
+            }
+        }
+    </script>
+</body>
+</html>
