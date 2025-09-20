@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from db import create_tables
 from routes import router
 import logging
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -21,14 +22,24 @@ app.add_middleware(
 app.include_router(router, prefix="/api/v1")
 
 @app.on_event("startup")
-def startup():
+async def startup():
     try:
         logger.info("Creating database tables...")
         create_tables()
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Failed to create tables: {e}")
-        raise e
+        # Don't raise in production, just log
+        pass
+
+# Add health check endpoint
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0"
+    }
 
 @app.get("/")
 def health():

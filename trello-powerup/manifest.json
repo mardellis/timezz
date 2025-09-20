@@ -1,0 +1,18 @@
+{
+  "name": "TimeZZ - Professional Time Tracking",
+  "details": "Track time directly from Trello cards with professional reporting and invoicing features.",
+  "author": "TimeZZ Team",
+  "capabilities": [
+    "card-buttons",
+    "card-badges",
+    "board-buttons"
+  ],
+  "connectors": {
+    "iframe": {
+      "url": "https://your-domain.com/trello-powerup.js"
+    }
+  },
+  "icon": {
+    "url": "https://your-domain.com/timezz-icon.png"
+  }
+}
