@@ -1,21 +1,11 @@
 {
-  "name": "TimeZZ - Professional Time Tracking",
-  "details": "Track time seamlessly on your Trello cards with powerful reporting, invoicing, and productivity insights. Perfect for freelancers, teams, and agencies.",
-  "author": "TimeZZ Team",
-  "capabilities": [
-    "card-buttons",
-    "card-badges", 
-    "board-buttons",
-    "card-detail-badges"
-  ],
+  "name": "TimeZZ Test",
+  "details": "Test için basit zaman takibi",
+  "author": "TimeZZ",
+  "capabilities": ["card-buttons", "board-buttons"],
   "connectors": {
     "iframe": {
-      "url": "https://timezz-frontend.onrender.com/trello-powerup.js"
+      "url": "https://timezz-frontend.onrender.com/test-powerup.js"
     }
-  },
-  "icon": {
-    "url": "https://timezz-frontend.onrender.com/icon.svg"
-  },
-  "tags": ["productivity", "time-tracking", "reporting", "invoicing"],
-  "moderator-notes": "TimeZZ is a professional time tracking solution that integrates seamlessly with Trello workflows."
+  }
 }
