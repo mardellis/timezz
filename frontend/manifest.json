@@ -7,9 +7,9 @@
     "card-badges",
     "board-buttons"
   ],
-  "connectors": {
-    "iframe": {
-      "url": "https://timezz-frontend.onrender.com/trello-powerup.js"
+"connectors": {
+  "iframe": {
+    "url": "https://timezz-frontend.onrender.com/trello-powerup.js"
     }
   },
   "icon": {
