@@ -1,458 +1,437 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
+from sqlalchemy import func, and_
+from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import Optional, List
-import json
-
 from db import get_db
+from models import User, TimeEntry, Project, Client
 from auth import get_current_user
-from models import User, TimeEntry, Project, Client, Goal, Invoice
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Auth Routes
+# Pydantic models
+class LoginRequest(BaseModel):
+    trello_user_id: str
+    trello_token: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+class StartTimerRequest(BaseModel):
+    card_id: str
+    card_name: str
+    board_id: str
+    list_name: Optional[str] = None
+    description: Optional[str] = None
+
+class ManualTimeEntryRequest(BaseModel):
+    card_id: str
+    card_name: str
+    board_id: str
+    duration_minutes: float
+    description: Optional[str] = None
+    list_name: Optional[str] = None
+
+# Authentication routes
 @router.post("/auth/login")
-async def login(
-    login_data: dict,
-    db: Session = Depends(get_db)
-):
-    from auth import create_access_token
-    
-    trello_id = login_data.get("trello_user_id")
-    if not trello_id:
-        raise HTTPException(400, "Missing trello_user_id")
-    
-    # Get or create user
-    user = db.query(User).filter(User.trello_id == trello_id).first()
-    if not user:
-        user = User(
-            trello_id=trello_id,
-            email=login_data.get("email", f"{trello_id}@trello.local"),
-            name=login_data.get("name", f"User {trello_id}")
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    
-    # Update last active
-    user.last_active = datetime.utcnow()
-    db.commit()
-    
-    token = create_access_token(trello_id)
-    
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "trello_id": user.trello_id
-        }
-    }
-
-# Timer Routes
-@router.get("/time/active")
-async def get_active_timer(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    # Check for running timer (no end_time)
-    active_entry = db.query(TimeEntry).filter(
-        and_(
-            TimeEntry.user_id == current_user.id,
-            TimeEntry.end_time.is_(None)
-        )
-    ).first()
-    
-    if active_entry:
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """Handle Trello Power-Up authentication"""
+    try:
+        # Get or create user
+        user = db.query(User).filter(User.trello_id == request.trello_user_id).first()
+        
+        if not user:
+            user = User(
+                trello_id=request.trello_user_id,
+                email=request.email or f"{request.trello_user_id}@trello.local",
+                name=request.name or "Trello User"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            # Update user info
+            if request.name:
+                user.name = request.name
+            if request.email:
+                user.email = request.email
+            user.last_active = datetime.utcnow()
+            db.commit()
+        
+        # Create access token
+        from auth import create_access_token
+        access_token = create_access_token(request.trello_user_id)
+        
         return {
-            "active": True,
-            "id": active_entry.id,
-            "started_at": active_entry.start_time.isoformat(),
-            "card_name": active_entry.card_name,
-            "project_id": active_entry.project_id,
-            "description": active_entry.description
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "trello_id": user.trello_id,
+                "subscription_tier": user.subscription_tier
+            }
         }
-    
-    return {"active": False}
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
+# Timer routes
 @router.post("/time/start")
 async def start_timer(
-    timer_data: dict,
+    request: StartTimerRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Stop any existing timer
-    existing = db.query(TimeEntry).filter(
-        and_(
+    """Start a new timer"""
+    try:
+        # Check if user has an active timer
+        active_timer = db.query(TimeEntry).filter(
             TimeEntry.user_id == current_user.id,
             TimeEntry.end_time.is_(None)
+        ).first()
+        
+        if active_timer:
+            # Stop the existing timer
+            active_timer.end_time = datetime.utcnow()
+            duration = (active_timer.end_time - active_timer.start_time).total_seconds() / 60
+            active_timer.duration_minutes = duration
+            db.commit()
+        
+        # Create new timer
+        new_timer = TimeEntry(
+            user_id=current_user.id,
+            card_id=request.card_id,
+            card_name=request.card_name,
+            board_id=request.board_id,
+            list_name=request.list_name,
+            description=request.description or f"Timer started for: {request.card_name}",
+            start_time=datetime.utcnow(),
+            is_manual=False
         )
-    ).first()
-    
-    if existing:
-        existing.end_time = datetime.utcnow()
-        existing.duration_minutes = (existing.end_time - existing.start_time).total_seconds() / 60
-        if existing.project_id:
-            project = db.query(Project).get(existing.project_id)
-            if project and project.hourly_rate:
-                existing.hourly_rate = project.hourly_rate
-                existing.amount = existing.duration_minutes / 60 * project.hourly_rate
-    
-    # Create new timer entry
-    new_entry = TimeEntry(
-        user_id=current_user.id,
-        project_id=timer_data.get("project_id"),
-        card_id=timer_data.get("card_id"),
-        card_name=timer_data.get("card_name", "Unnamed Task"),
-        board_id=timer_data.get("board_id"),
-        list_name=timer_data.get("list_name"),
-        start_time=datetime.utcnow(),
-        description=timer_data.get("description", ""),
-        is_manual=False
-    )
-    
-    db.add(new_entry)
-    db.commit()
-    db.refresh(new_entry)
-    
-    return {
-        "id": new_entry.id,
-        "started_at": new_entry.start_time.isoformat(),
-        "card_name": new_entry.card_name,
-        "project_id": new_entry.project_id
-    }
+        
+        db.add(new_timer)
+        db.commit()
+        db.refresh(new_timer)
+        
+        return {
+            "id": new_timer.id,
+            "card_id": new_timer.card_id,
+            "card_name": new_timer.card_name,
+            "start_time": new_timer.start_time.isoformat(),
+            "message": "Timer started successfully"
+        }
+    except Exception as e:
+        logger.error(f"Start timer error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/time/stop")
 async def stop_timer(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Find active timer
-    active_entry = db.query(TimeEntry).filter(
-        and_(
+    """Stop the active timer"""
+    try:
+        # Find active timer
+        active_timer = db.query(TimeEntry).filter(
             TimeEntry.user_id == current_user.id,
             TimeEntry.end_time.is_(None)
-        )
-    ).first()
-    
-    if not active_entry:
-        raise HTTPException(404, "No active timer found")
-    
-    # Stop the timer
-    active_entry.end_time = datetime.utcnow()
-    active_entry.duration_minutes = (active_entry.end_time - active_entry.start_time).total_seconds() / 60
-    
-    # Calculate amount if project has rate
-    if active_entry.project_id:
-        project = db.query(Project).get(active_entry.project_id)
-        if project and project.hourly_rate:
-            active_entry.hourly_rate = project.hourly_rate
-            active_entry.amount = active_entry.duration_minutes / 60 * project.hourly_rate
-    elif current_user.hourly_rate:
-        active_entry.hourly_rate = current_user.hourly_rate
-        active_entry.amount = active_entry.duration_minutes / 60 * current_user.hourly_rate
-    
-    db.commit()
-    
-    return {
-        "id": active_entry.id,
-        "duration_minutes": active_entry.duration_minutes,
-        "amount": active_entry.amount or 0
-    }
+        ).first()
+        
+        if not active_timer:
+            raise HTTPException(status_code=404, detail="No active timer found")
+        
+        # Stop timer
+        active_timer.end_time = datetime.utcnow()
+        duration = (active_timer.end_time - active_timer.start_time).total_seconds() / 60
+        active_timer.duration_minutes = duration
+        
+        # Calculate amount if hourly rate is set
+        if current_user.hourly_rate:
+            active_timer.hourly_rate = current_user.hourly_rate
+            active_timer.amount = (duration / 60) * current_user.hourly_rate
+        
+        db.commit()
+        db.refresh(active_timer)
+        
+        return {
+            "id": active_timer.id,
+            "duration_minutes": active_timer.duration_minutes,
+            "duration_hours": round(duration / 60, 2),
+            "card_name": active_timer.card_name,
+            "amount": active_timer.amount,
+            "message": f"Timer stopped. Duration: {round(duration / 60, 2)} hours"
+        }
+    except Exception as e:
+        logger.error(f"Stop timer error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("/time/active")
+async def get_active_timer(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get currently active timer"""
+    try:
+        active_timer = db.query(TimeEntry).filter(
+            TimeEntry.user_id == current_user.id,
+            TimeEntry.end_time.is_(None)
+        ).first()
+        
+        if not active_timer:
+            return {"active": False, "timer": None}
+        
+        # Calculate current duration
+        current_duration = (datetime.utcnow() - active_timer.start_time).total_seconds() / 60
+        
+        return {
+            "active": True,
+            "timer": {
+                "id": active_timer.id,
+                "card_id": active_timer.card_id,
+                "card_name": active_timer.card_name,
+                "board_id": active_timer.board_id,
+                "start_time": active_timer.start_time.isoformat(),
+                "duration_minutes": current_duration,
+                "description": active_timer.description
+            }
+        }
+    except Exception as e:
+        logger.error(f"Get active timer error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Manual time entry
+@router.post("/time/entries/manual")
+async def create_manual_entry(
+    request: ManualTimeEntryRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create manual time entry"""
+    try:
+        entry = TimeEntry(
+            user_id=current_user.id,
+            card_id=request.card_id,
+            card_name=request.card_name,
+            board_id=request.board_id,
+            list_name=request.list_name,
+            duration_minutes=request.duration_minutes,
+            description=request.description or f"Manual entry for: {request.card_name}",
+            start_time=datetime.utcnow() - timedelta(minutes=request.duration_minutes),
+            end_time=datetime.utcnow(),
+            is_manual=True
+        )
+        
+        # Calculate amount if hourly rate is set
+        if current_user.hourly_rate:
+            entry.hourly_rate = current_user.hourly_rate
+            entry.amount = (request.duration_minutes / 60) * current_user.hourly_rate
+        
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        
+        return {
+            "id": entry.id,
+            "duration_minutes": entry.duration_minutes,
+            "duration_hours": round(entry.duration_minutes / 60, 2),
+            "card_name": entry.card_name,
+            "amount": entry.amount,
+            "created_at": entry.created_at.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Manual entry error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Get time entries
 @router.get("/time/entries")
 async def get_time_entries(
+    limit: int = 50,
+    board_id: Optional[str] = None,
+    days: Optional[int] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = Query(50, le=100),
-    offset: int = Query(0, ge=0),
-    project_id: Optional[int] = Query(None),
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None)
+    db: Session = Depends(get_db)
 ):
-    query = db.query(TimeEntry).filter(TimeEntry.user_id == current_user.id)
-    
-    if project_id:
-        query = query.filter(TimeEntry.project_id == project_id)
-    
-    if start_date:
-        query = query.filter(TimeEntry.start_time >= datetime.fromisoformat(start_date))
-    
-    if end_date:
-        query = query.filter(TimeEntry.start_time <= datetime.fromisoformat(end_date))
-    
-    entries = query.order_by(desc(TimeEntry.start_time)).offset(offset).limit(limit).all()
-    
-    result = []
-    for entry in entries:
-        result.append({
+    """Get user's time entries"""
+    try:
+        query = db.query(TimeEntry).filter(TimeEntry.user_id == current_user.id)
+        
+        if board_id:
+            query = query.filter(TimeEntry.board_id == board_id)
+        
+        if days:
+            start_date = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(TimeEntry.created_at >= start_date)
+        
+        entries = query.order_by(TimeEntry.created_at.desc()).limit(limit).all()
+        
+        return [{
             "id": entry.id,
+            "card_id": entry.card_id,
             "card_name": entry.card_name,
-            "project_id": entry.project_id,
-            "start_time": entry.start_time.isoformat() if entry.start_time else None,
-            "end_time": entry.end_time.isoformat() if entry.end_time else None,
-            "duration_minutes": entry.duration_minutes or 0,
-            "amount": entry.amount or 0,
+            "board_id": entry.board_id,
+            "list_name": entry.list_name,
+            "duration_minutes": entry.duration_minutes,
+            "duration_hours": round((entry.duration_minutes or 0) / 60, 2),
             "description": entry.description,
+            "amount": entry.amount,
+            "is_manual": entry.is_manual,
             "is_billable": entry.is_billable,
-            "created_at": entry.created_at.isoformat()
-        })
-    
-    return result
+            "created_at": entry.created_at.isoformat(),
+            "start_time": entry.start_time.isoformat() if entry.start_time else None,
+            "end_time": entry.end_time.isoformat() if entry.end_time else None
+        } for entry in entries]
+    except Exception as e:
+        logger.error(f"Get entries error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/time/entries")
-async def create_manual_entry(
-    entry_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    start_time = datetime.fromisoformat(entry_data["start_time"])
-    end_time = datetime.fromisoformat(entry_data["end_time"])
-    
-    if start_time >= end_time:
-        raise HTTPException(400, "End time must be after start time")
-    
-    duration_minutes = (end_time - start_time).total_seconds() / 60
-    
-    # Calculate amount
-    hourly_rate = entry_data.get("hourly_rate")
-    if not hourly_rate and entry_data.get("project_id"):
-        project = db.query(Project).get(entry_data["project_id"])
-        if project:
-            hourly_rate = project.hourly_rate
-    if not hourly_rate:
-        hourly_rate = current_user.hourly_rate or 0
-    
-    amount = duration_minutes / 60 * hourly_rate if hourly_rate else 0
-    
-    entry = TimeEntry(
-        user_id=current_user.id,
-        project_id=entry_data.get("project_id"),
-        card_name=entry_data["card_name"],
-        start_time=start_time,
-        end_time=end_time,
-        duration_minutes=duration_minutes,
-        description=entry_data.get("description", ""),
-        hourly_rate=hourly_rate,
-        amount=amount,
-        is_manual=True,
-        is_billable=entry_data.get("is_billable", True)
-    )
-    
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    
-    return {
-        "id": entry.id,
-        "duration_minutes": entry.duration_minutes,
-        "amount": entry.amount
-    }
-
-# Project Routes
-@router.get("/projects")
-async def get_projects(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    projects = db.query(Project).filter(Project.user_id == current_user.id).all()
-    
-    result = []
-    for project in projects:
-        # Get project stats
-        total_time = db.query(func.sum(TimeEntry.duration_minutes)).filter(
-            and_(
-                TimeEntry.user_id == current_user.id,
-                TimeEntry.project_id == project.id
-            )
-        ).scalar() or 0
-        
-        total_earnings = db.query(func.sum(TimeEntry.amount)).filter(
-            and_(
-                TimeEntry.user_id == current_user.id,
-                TimeEntry.project_id == project.id
-            )
-        ).scalar() or 0
-        
-        result.append({
-            "id": project.id,
-            "name": project.name,
-            "description": project.description,
-            "client_id": project.client_id,
-            "status": project.status,
-            "hourly_rate": project.hourly_rate,
-            "color": project.color,
-            "total_hours": total_time / 60,
-            "total_earnings": total_earnings,
-            "created_at": project.created_at.isoformat()
-        })
-    
-    return result
-
-@router.post("/projects")
-async def create_project(
-    project_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    project = Project(
-        user_id=current_user.id,
-        name=project_data["name"],
-        description=project_data.get("description", ""),
-        client_id=project_data.get("client_id"),
-        hourly_rate=project_data.get("hourly_rate"),
-        color=project_data.get("color", "#0079bf"),
-        is_billable=project_data.get("is_billable", True)
-    )
-    
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    
-    return {
-        "id": project.id,
-        "name": project.name,
-        "client_id": project.client_id,
-        "hourly_rate": project.hourly_rate
-    }
-
-# Client Routes
-@router.get("/clients")
-async def get_clients(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    clients = db.query(Client).filter(Client.user_id == current_user.id).all()
-    
-    result = []
-    for client in clients:
-        # Get client stats
-        total_earnings = db.query(func.sum(TimeEntry.amount)).join(Project).filter(
-            and_(
-                Project.client_id == client.id,
-                TimeEntry.user_id == current_user.id
-            )
-        ).scalar() or 0
-        
-        project_count = db.query(func.count(Project.id)).filter(
-            Project.client_id == client.id
-        ).scalar() or 0
-        
-        result.append({
-            "id": client.id,
-            "name": client.name,
-            "email": client.email,
-            "company": client.company,
-            "hourly_rate": client.hourly_rate,
-            "total_earnings": total_earnings,
-            "project_count": project_count,
-            "created_at": client.created_at.isoformat()
-        })
-    
-    return result
-
-@router.post("/clients")
-async def create_client(
-    client_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    client = Client(
-        user_id=current_user.id,
-        name=client_data["name"],
-        email=client_data.get("email"),
-        company=client_data.get("company"),
-        hourly_rate=client_data.get("hourly_rate"),
-        address=client_data.get("address"),
-        phone=client_data.get("phone"),
-        notes=client_data.get("notes")
-    )
-    
-    db.add(client)
-    db.commit()
-    db.refresh(client)
-    
-    return {
-        "id": client.id,
-        "name": client.name,
-        "email": client.email,
-        "hourly_rate": client.hourly_rate
-    }
-
-# Reports Routes
-@router.get("/reports/dashboard")
-async def get_dashboard_stats(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = today_start - timedelta(days=today_start.weekday())
-    
-    # Today's stats
-    today_entries = db.query(TimeEntry).filter(
-        and_(
-            TimeEntry.user_id == current_user.id,
-            TimeEntry.start_time >= today_start
-        )
-    ).all()
-    
-    # Week's stats
-    week_entries = db.query(TimeEntry).filter(
-        and_(
-            TimeEntry.user_id == current_user.id,
-            TimeEntry.start_time >= week_start
-        )
-    ).all()
-    
-    # Active timer check
-    active_timer = db.query(TimeEntry).filter(
-        and_(
-            TimeEntry.user_id == current_user.id,
-            TimeEntry.end_time.is_(None)
-        )
-    ).first()
-    
-    today_hours = sum(entry.duration_minutes or 0 for entry in today_entries) / 60
-    week_hours = sum(entry.duration_minutes or 0 for entry in week_entries) / 60
-    week_earnings = sum(entry.amount or 0 for entry in week_entries)
-    
-    return {
-        "total_hours": today_hours,
-        "week_hours": week_hours,
-        "week_earnings": week_earnings,
-        "active_tasks": 1 if active_timer else 0,
-        "recent_entries": len(today_entries)
-    }
-
+# Reports
 @router.get("/reports/detailed")
 async def get_detailed_report(
+    days: int = 30,
+    board_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    days: int = Query(7, ge=1, le=365)
+    db: Session = Depends(get_db)
 ):
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    entries = db.query(TimeEntry).filter(
-        and_(
+    """Get detailed time tracking report"""
+    try:
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Base query
+        query = db.query(TimeEntry).filter(
             TimeEntry.user_id == current_user.id,
-            TimeEntry.start_time >= start_date,
-            TimeEntry.end_time.isnot(None)
+            TimeEntry.created_at >= start_date
         )
-    ).all()
-    
-    total_hours = sum(entry.duration_minutes or 0 for entry in entries) / 60
-    total_earnings = sum(entry.amount or 0 for entry in entries)
-    billable_hours = sum(entry.duration_minutes or 0 for entry in entries if entry.is_billable) / 60
-    
+        
+        if board_id:
+            query = query.filter(TimeEntry.board_id == board_id)
+        
+        entries = query.all()
+        
+        # Calculate totals
+        total_minutes = sum(entry.duration_minutes or 0 for entry in entries)
+        total_hours = total_minutes / 60
+        total_amount = sum(entry.amount or 0 for entry in entries)
+        
+        # Today's stats
+        today = datetime.utcnow().date()
+        today_entries = [e for e in entries if e.created_at.date() == today]
+        today_minutes = sum(entry.duration_minutes or 0 for entry in today_entries)
+        
+        # This week's stats
+        week_start = datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())
+        week_entries = [e for e in entries if e.created_at >= week_start]
+        week_minutes = sum(entry.duration_minutes or 0 for entry in week_entries)
+        
+        # Group by board
+        board_stats = {}
+        for entry in entries:
+            if entry.board_id not in board_stats:
+                board_stats[entry.board_id] = {
+                    "board_id": entry.board_id,
+                    "total_minutes": 0,
+                    "total_entries": 0,
+                    "total_amount": 0
+                }
+            board_stats[entry.board_id]["total_minutes"] += entry.duration_minutes or 0
+            board_stats[entry.board_id]["total_entries"] += 1
+            board_stats[entry.board_id]["total_amount"] += entry.amount or 0
+        
+        return {
+            "period_days": days,
+            "total_hours": round(total_hours, 2),
+            "total_minutes": total_minutes,
+            "total_entries": len(entries),
+            "total_amount": round(total_amount, 2),
+            "today_hours": round(today_minutes / 60, 2),
+            "week_hours": round(week_minutes / 60, 2),
+            "daily_average": round(total_hours / max(days, 1), 2),
+            "board_breakdown": list(board_stats.values()),
+            "recent_entries": [
+                {
+                    "id": entry.id,
+                    "card_name": entry.card_name,
+                    "duration_hours": round((entry.duration_minutes or 0) / 60, 2),
+                    "created_at": entry.created_at.isoformat()
+                }
+                for entry in sorted(entries, key=lambda x: x.created_at, reverse=True)[:10]
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Report error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/reports/board/{board_id}")
+async def get_board_report(
+    board_id: str,
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get report for specific board"""
+    try:
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        entries = db.query(TimeEntry).filter(
+            TimeEntry.user_id == current_user.id,
+            TimeEntry.board_id == board_id,
+            TimeEntry.created_at >= start_date
+        ).all()
+        
+        total_minutes = sum(entry.duration_minutes or 0 for entry in entries)
+        
+        # Today's entries
+        today = datetime.utcnow().date()
+        today_entries = [e for e in entries if e.created_at.date() == today]
+        today_minutes = sum(entry.duration_minutes or 0 for entry in today_entries)
+        
+        # This week's entries
+        week_start = datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())
+        week_entries = [e for e in entries if e.created_at >= week_start]
+        week_minutes = sum(entry.duration_minutes or 0 for entry in week_entries)
+        
+        return {
+            "board_id": board_id,
+            "period_days": days,
+            "today_hours": round(today_minutes / 60, 2),
+            "week_hours": round(week_minutes / 60, 2),
+            "total_hours": round(total_minutes / 60, 2),
+            "total_entries": len(entries),
+            "daily_average": round((total_minutes / 60) / max(days, 1), 2),
+            "recent_entries": [
+                {
+                    "id": entry.id,
+                    "card_id": entry.card_id,
+                    "card_name": entry.card_name,
+                    "duration_minutes": entry.duration_minutes,
+                    "created_at": entry.created_at.isoformat()
+                }
+                for entry in sorted(entries, key=lambda x: x.created_at, reverse=True)[:10]
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Board report error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# User profile
+@router.get("/user/profile")
+async def get_user_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user profile"""
     return {
-        "total_hours": total_hours,
-        "total_earnings": total_earnings,
-        "billable_hours": billable_hours,
-        "total_entries": len(entries),
-        "average_session": total_hours / len(entries) if entries else 0,
-        "productivity": (billable_hours / total_hours * 100) if total_hours > 0 else 0
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "trello_id": current_user.trello_id,
+        "subscription_tier": current_user.subscription_tier,
+        "hourly_rate": current_user.hourly_rate,
+        "currency": current_user.currency,
+        "created_at": current_user.created_at.isoformat()
     }

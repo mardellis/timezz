@@ -139,7 +139,7 @@
             
             // Send to TimeZZ backend
             try {
-                const response = await fetch('http://localhost:8000/api/v1/time/start', {
+                const response = await fetch('https://timezz-backend.onrender.com/api/v1/time/start', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -168,7 +168,7 @@
             
             // Send to TimeZZ backend
             try {
-                const response = await fetch('http://localhost:8000/api/v1/time/stop', {
+                const response = await fetch('https://timezz-backend.onrender.com/api/v1/time/stop', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

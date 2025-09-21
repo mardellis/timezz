@@ -250,9 +250,9 @@
             return token || null;
         }
 
-        function getApiUrl() {
-            // In production, this should be your actual domain
-            return window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://your-api-domain.com';
+       // Line 206 - REPLACE this function
+         function getApiUrl() {
+         return 'https://timezz-backend.onrender.com';
         }
 
         function formatHours(hours) {

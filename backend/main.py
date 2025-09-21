@@ -17,7 +17,6 @@ app.add_middleware(
         "https://trello.com",
         "https://*.trellocdn.com",
         "https://powerup.timezz.com",
-        "https://app.timezz.com" 
         "https://timezz-frontend.onrender.com",
         "https://timezz-backend.onrender.com"
 
