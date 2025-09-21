@@ -1,24 +1,51 @@
+# FastAPI and Core Dependencies
 fastapi
 uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Database
 sqlalchemy
 psycopg2-binary
+alembic
+
+# Authentication & Security
 pyjwt
 passlib[bcrypt]
-python-multipart
-pydantic-settings
+python-jose[cryptography]
+cryptography
+
+# HTTP & Web
+httpx
 requests
+python-multipart
+
+# Environment & Configuration
 python-dotenv
-alembic
+
+# Background Tasks
 celery
 redis
+
+# External Services
 stripe
 sendgrid
-reportlab
+
+# Data Processing & Reports
 pandas
 numpy
-python-jose[cryptography]
-httpx
-Pillow
-jinja2
+reportlab
+
+# File Handling
 aiofiles
+Pillow
+
+# Template Engine
+jinja2
+
+# Utilities
 python-slugify
+python-dateutil
+
+# Development & Deployment
+gunicorn

@@ -1,0 +1,44 @@
+services:
+  # Backend API Service
+  - type: web
+    name: timezz-backend
+    env: python
+    plan: starter
+    buildCommand: |
+      cd backend
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: |
+      cd backend
+      python -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: timezz-postgres
+          property: connectionString
+    healthCheckPath: /health
+    
+  # Database Service
+  - type: pgsql
+    name: timezz-postgres
+    plan: starter
+    databaseName: timezz
+    user: timezz
+    ipAllowList: []
+
+  # Frontend Service (if needed)
+  - type: static
+    name: timezz-frontend
+    buildCommand: |
+      # Static files will be served directly
+      echo "Building frontend..."
+    staticPublishPath: ./frontend
+    envVars:
+      - key: BACKEND_URL
+        value: https://timezz-backend.onrender.com
